@@ -107,6 +107,24 @@ describe("HTTP transport configuration", () => {
       );
     });
 
+    it("allows the MCP protocol headers sent by browser clients", async () => {
+      await start({ allowedOrigins: ["https://app.example"] });
+
+      const preflight = await fetch(`${baseUrl}/mcp`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://app.example",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers":
+            "content-type,mcp-protocol-version,mcp-session-id",
+        },
+      });
+
+      const allowed = (preflight.headers.get("access-control-allow-headers") ?? "").toLowerCase();
+      expect(allowed).toContain("mcp-protocol-version");
+      expect(allowed).toContain("mcp-session-id");
+    });
+
     it("does not allow a non-allowlisted origin even when others are allowlisted", async () => {
       await start({ allowedOrigins: ["https://app.example"] });
 

@@ -91,7 +91,12 @@ export function createHttpApp(options: HttpAppOptions): Express {
         return callback(new CorsOriginNotAllowedError(origin));
       },
       exposedHeaders: ["Mcp-Session-Id", "mcp-protocol-version"],
-      allowedHeaders: ["Content-Type", "mcp-session-id"],
+      allowedHeaders: [
+        "Content-Type",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "last-event-id",
+      ],
     }),
   );
 

@@ -3,6 +3,7 @@ import {
   extractAgentText,
   formatAgentResponseText,
   getProxyUrl,
+  performSearch,
   proxyAwareFetch,
   validateMessages,
 } from "./server.js";
@@ -258,6 +259,34 @@ describe("Server Utility Functions", () => {
 
       const result = getProxyUrl();
       expect(result).toBe("http://specific-proxy:8080");
+    });
+  });
+
+  describe("PERPLEXITY_TIMEOUT_MS handling", () => {
+    let originalEnv: NodeJS.ProcessEnv;
+    let originalFetch: typeof global.fetch;
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      originalFetch = global.fetch;
+      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.HTTPS_PROXY;
+      delete process.env.HTTP_PROXY;
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      global.fetch = originalFetch;
+    });
+
+    it.each(["abc", "0", "-5"])("falls back to the default for invalid value %j", async (value) => {
+      process.env.PERPLEXITY_TIMEOUT_MS = value;
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ results: [] }), { status: 200 }),
+      );
+
+      // An invalid value used to become NaN and abort every request immediately.
+      await expect(performSearch("q")).resolves.toContain("search results");
     });
   });
 

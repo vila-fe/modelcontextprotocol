@@ -32,11 +32,31 @@ export function getProxyUrl(): string | undefined {
          undefined;
 }
 
+const DEFAULT_TIMEOUT_MS = 300000;
+
+/** Read fresh on each call; a non-positive or non-numeric value falls back to the default. */
+function getTimeoutMs(): number {
+  const parsed = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+}
+
+// A ProxyAgent owns a connection pool, so build one per proxy URL rather than per request.
+const proxyAgents = new Map<string, ProxyAgent>();
+
+function getProxyAgent(proxyUrl: string): ProxyAgent {
+  let agent = proxyAgents.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent(proxyUrl);
+    proxyAgents.set(proxyUrl, agent);
+  }
+  return agent;
+}
+
 export async function proxyAwareFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const proxyUrl = getProxyUrl();
 
   if (proxyUrl) {
-    const proxyAgent = new ProxyAgent(proxyUrl);
+    const proxyAgent = getProxyAgent(proxyUrl);
     const undiciOptions: UndiciRequestOptions = {
       ...options,
       dispatcher: proxyAgent,
@@ -90,7 +110,7 @@ async function makeApiRequest(
   }
 
   // Read timeout fresh each time to respect env var changes
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const TIMEOUT_MS = getTimeoutMs();
 
   const url = new URL(`${PERPLEXITY_BASE_URL}/${endpoint}`);
   const controller = new AbortController();
@@ -423,7 +443,7 @@ export async function performAgentResponse(
   // PERPLEXITY_TIMEOUT_MS bounds the whole call, not just time-to-headers:
   // streamed responses return headers immediately, so a headers-only timeout
   // would never fire.
-  const TIMEOUT_MS = parseInt(process.env.PERPLEXITY_TIMEOUT_MS || "300000", 10);
+  const TIMEOUT_MS = getTimeoutMs();
   const deadline = new AbortController();
   const timeoutId = setTimeout(() => deadline.abort(), TIMEOUT_MS);
   const abortDeadline = () => deadline.abort();
