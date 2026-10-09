@@ -18,7 +18,7 @@ export type { ApiKeyProvider, PerplexityServerOptions } from "./types.js";
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || "https://api.perplexity.ai";
-const VERSION = "1.2.0";
+export const VERSION = "1.2.0";
 
 // Agent API presets backing each tool: https://docs.perplexity.ai/docs/agent-api/presets
 export const ASK_PRESET = "fast";
@@ -513,17 +513,40 @@ export async function performSearch(
     ...(filters?.search_domain_filter && { search_domain_filter: filters.search_domain_filter }),
   };
 
-  const response = await makeApiRequest("search", body, serviceOrigin, undefined, apiKey);
+  // makeApiRequest only bounds time-to-headers, so the deadline also covers
+  // reading the body: a server that stalls mid-body must not hang the call.
+  const TIMEOUT_MS = getTimeoutMs();
+  const deadline = new AbortController();
+  const timeoutId = setTimeout(() => deadline.abort(), TIMEOUT_MS);
+  const timeoutError = () =>
+    new Error(`Request timeout: Perplexity API did not respond within ${TIMEOUT_MS}ms. Consider increasing PERPLEXITY_TIMEOUT_MS.`);
 
-  let data: SearchResponse;
   try {
-    const json = await response.json();
-    data = SearchResponseSchema.parse(json);
-  } catch (error) {
-    throw new Error(`Failed to parse JSON response from Perplexity Search API: ${error}`);
-  }
+    const response = await makeApiRequest("search", body, serviceOrigin, deadline.signal, apiKey);
 
-  return formatSearchResults(data);
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch (error) {
+      if (deadline.signal.aborted) throw timeoutError();
+      throw new Error(`Failed to parse JSON response from Perplexity Search API: ${error}`);
+    }
+
+    let data: SearchResponse;
+    try {
+      data = SearchResponseSchema.parse(json);
+    } catch (error) {
+      throw new Error(`Failed to parse JSON response from Perplexity Search API: ${error}`);
+    }
+    return formatSearchResults(data);
+  } catch (error) {
+    if (deadline.signal.aborted && error instanceof Error && error.name === "AbortError") {
+      throw timeoutError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 interface ToolExtra {
