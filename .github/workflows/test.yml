@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['20', '22']
 
     steps:
       - name: Checkout code
@@ -16,12 +19,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Run tests
         env:
           PERPLEXITY_API_KEY: test-api-key
         run: npm test
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Build image
+        run: docker build -t perplexity-mcp-server .
+
+      - name: Smoke test published port
+        run: |
+          docker run -d --name mcp -p 8080:8080 -e PERPLEXITY_API_KEY=test-api-key perplexity-mcp-server
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:8080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs mcp
+          exit 1

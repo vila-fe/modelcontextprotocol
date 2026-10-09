@@ -27,6 +27,8 @@ docker run --rm -p 8080:8080 -e PERPLEXITY_API_KEY=your_key_here perplexity-mcp-
 
 The server will be accessible at `http://localhost:8080/mcp`
 
+The image binds to `0.0.0.0` inside the container so published ports work. To keep it reachable only from the host, publish with `-p 127.0.0.1:8080:8080`.
+
 ### With Custom Timeout
 
 Set a custom timeout for requests (default is 5 minutes):

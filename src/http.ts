@@ -91,7 +91,12 @@ export function createHttpApp(options: HttpAppOptions): Express {
         return callback(new CorsOriginNotAllowedError(origin));
       },
       exposedHeaders: ["Mcp-Session-Id", "mcp-protocol-version"],
-      allowedHeaders: ["Content-Type", "mcp-session-id"],
+      allowedHeaders: [
+        "Content-Type",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "last-event-id",
+      ],
     }),
   );
 
@@ -197,6 +202,12 @@ function main(): void {
   }
 
   const PORT = parseInt(process.env.PORT || "8080", 10);
+  if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+    logger.error("PORT must be an integer between 0 and 65535", {
+      port: process.env.PORT,
+    });
+    process.exit(1);
+  }
 
   // Defaults are loopback-only with no allowed cross-origin browsers.
   // Set BIND_ADDRESS and ALLOWED_ORIGINS to opt in to remote / browser access.

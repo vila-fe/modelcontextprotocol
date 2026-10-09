@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   extractAgentText,
   formatAgentResponseText,
   getProxyUrl,
+  performSearch,
+  VERSION,
   proxyAwareFetch,
   validateMessages,
 } from "./server.js";
@@ -258,6 +261,62 @@ describe("Server Utility Functions", () => {
 
       const result = getProxyUrl();
       expect(result).toBe("http://specific-proxy:8080");
+    });
+  });
+
+  describe("version consistency", () => {
+    it.each(["package.json", "plugin.json", "server.json"])(
+      "matches the version in %s",
+      (file) => {
+        const manifest = JSON.parse(
+          readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
+        );
+        expect(manifest.version).toBe(VERSION);
+      },
+    );
+  });
+
+  describe("PERPLEXITY_TIMEOUT_MS handling", () => {
+    let originalEnv: NodeJS.ProcessEnv;
+    let originalFetch: typeof global.fetch;
+
+    beforeEach(() => {
+      originalEnv = { ...process.env };
+      originalFetch = global.fetch;
+      delete process.env.PERPLEXITY_PROXY;
+      delete process.env.HTTPS_PROXY;
+      delete process.env.HTTP_PROXY;
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      global.fetch = originalFetch;
+    });
+
+    it("times out when the search body stalls after headers", async () => {
+      process.env.PERPLEXITY_TIMEOUT_MS = "50";
+      global.fetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+        const stalled = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init.signal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        });
+        return Promise.resolve(new Response(stalled, { status: 200 }));
+      });
+
+      await expect(performSearch("q")).rejects.toThrow(/Request timeout.*50ms/);
+    });
+
+    it.each(["abc", "0", "-5"])("falls back to the default for invalid value %j", async (value) => {
+      process.env.PERPLEXITY_TIMEOUT_MS = value;
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ results: [] }), { status: 200 }),
+      );
+
+      // An invalid value used to become NaN and abort every request immediately.
+      await expect(performSearch("q")).resolves.toContain("search results");
     });
   });
 
