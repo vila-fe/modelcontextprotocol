@@ -46,7 +46,7 @@
     ".claude-plugin"
   ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
+    "build": "tsc && node -e \"const fs=require('fs');for(const f of fs.readdirSync('dist'))if(f.endsWith('.js'))fs.chmodSync('dist/'+f,0o755)\"",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
@@ -62,7 +62,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "undici": "^6.20.0",
     "zod": "^3.25.46"
   },
@@ -71,7 +71,6 @@
     "@types/express": "^5.0.0",
     "@types/node": "^20",
     "@vitest/coverage-v8": "^4.0.5",
-    "shx": "^0.4.0",
     "tsx": "^4.19.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.5"
